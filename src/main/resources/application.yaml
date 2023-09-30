@@ -1,0 +1,23 @@
+spring:
+  rsocket:
+    server:
+      port: ${BRIDGE_RSOCKET_SERVER_PORT:7000}
+
+# quic
+# rsocket
+bridge:
+  protocol: ${BRIDGE_PROTOCOL:rsocket}
+  http:
+    test-path: ${BRIDGE_HTTP_TEST_PATH:http://127.0.0.1:8080}
+  quic:
+    server:
+      enabled: ${BRIDGE_QUIC_SERVER_ENABLED:true}
+      host: ${BRIDGE_QUIC_SERVER_HOST:127.0.0.1}
+      port: ${BRIDGE_QUIC_SERVER_PORT:9799}
+    client:
+      port: ${BRIDGE_QUIC_CLIENT_PORT:9899}
+  rsocket:
+    server:
+      host: ${BRIDGE_RSOCKET_SERVER_HOST:127.0.0.1}
+      port: ${BRIDGE_RSOCKET_SERVER_PORT:7000}
+    channel: ${BRIDGE_RSOCKET_CHANNEL:rsocket-bridge}
