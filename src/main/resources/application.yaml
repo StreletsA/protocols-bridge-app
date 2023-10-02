@@ -6,7 +6,7 @@ spring:
 # quic
 # rsocket
 bridge:
-  protocol: ${BRIDGE_PROTOCOL:rsocket}
+  protocol: ${BRIDGE_PROTOCOL:quic}
   http:
     test-path: ${BRIDGE_HTTP_TEST_PATH:http://127.0.0.1:8080}
   quic:

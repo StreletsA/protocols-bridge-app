@@ -27,6 +27,8 @@ import io.netty.incubator.codec.quic.QuicStreamChannel;
 import io.netty.util.ReferenceCountUtil;
 import jakarta.annotation.Nullable;
 import com.github.streletsa.protocols.bridge.app.common.Result;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
@@ -39,13 +41,23 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class QuicClient {
-    public <T> Result<T> sendRequest(int clientPort,
-                                     String serverHost,
-                                     int serverPort,
-                                     HttpMethod method,
-                                     String path,
-                                     @Nullable RequestBody<?> requestBody,
-                                     @Nullable Class<T> responseType) throws InterruptedException {
+    private final String quicServerHost;
+    private final int quicServerPort;
+    private final int quicClientPort;
+
+    private Channel channel;
+
+    public QuicClient(@Value("${bridge.quic.server.host}") String quicServerHost,
+                      @Value("${bridge.quic.server.port}") int quicServerPort,
+                      @Value("${bridge.quic.client.port}") int quicClientPort) throws InterruptedException {
+        this.quicServerHost = quicServerHost;
+        this.quicServerPort = quicServerPort;
+        this.quicClientPort = quicClientPort;
+
+        openChannel();
+    }
+
+    private void openChannel() throws InterruptedException {
         QuicSslContext context = QuicSslContextBuilder.forClient()
                                                       .trustManager(InsecureTrustManagerFactory.INSTANCE)
                                                       .applicationProtocols(Http3.supportedApplicationProtocols()).build();
@@ -56,20 +68,28 @@ public class QuicClient {
                                     .initialMaxStreamDataBidirectionalLocal(1000000)
                                     .build();
         NioEventLoopGroup group = new NioEventLoopGroup(1);
+        Bootstrap bs = new Bootstrap();
 
+        this.channel = bs.group(group)
+                         .channel(NioDatagramChannel.class)
+                         .handler(codec)
+                         .bind(quicClientPort).sync().channel();
+    }
+
+    public <T> Result<T> sendRequest(HttpMethod method,
+                                     String path,
+                                     @Nullable RequestBody<?> requestBody,
+                                     @Nullable Class<T> responseType) throws InterruptedException {
         try {
-            Bootstrap bs = new Bootstrap();
-            Channel channel = bs.group(group)
-                                .channel(NioDatagramChannel.class)
-                                .handler(codec)
-                                .bind(clientPort).sync().channel();
+            if (!this.channel.isOpen()) {
+                openChannel();
+            }
 
             QuicChannel quicChannel = QuicChannel.newBootstrap(channel)
-                                                 .handler(new Http3ClientConnectionHandler())
-                                                 .remoteAddress(new InetSocketAddress(serverHost, serverPort))
-                                                 .connect()
-                                                 .get();
-
+                                          .handler(new Http3ClientConnectionHandler())
+                                          .remoteAddress(new InetSocketAddress(this.quicServerHost, this.quicServerPort))
+                                          .connect()
+                                          .get();
             CustomHttp3ClientHandler<T> handler = new CustomHttp3ClientHandler<>(responseType);
             QuicStreamChannel streamChannel =
                     Http3.newRequestStream(quicChannel, handler).sync().getNow();
@@ -113,13 +133,11 @@ public class QuicClient {
 
             streamChannel.closeFuture().sync();
             quicChannel.close().sync();
-            channel.close().sync();
+            channel.close();
 
             return handler.getResult();
         } catch (ExecutionException | IOException e) {
             throw new RuntimeException(e);
-        } finally {
-            group.shutdownGracefully();
         }
     }
 
@@ -171,6 +189,14 @@ public class QuicClient {
             } catch (Exception e) {
                 return Result.error(this.resultContentType, e.getMessage());
             }
+        }
+    }
+
+    @PreDestroy
+    public void preDestroy() {
+        try {
+            channel.close();
+        } catch (Exception e) {
         }
     }
 }

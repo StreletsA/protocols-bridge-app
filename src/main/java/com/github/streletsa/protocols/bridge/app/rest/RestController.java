@@ -24,13 +24,6 @@ public class RestController {
     @Value("${bridge.rsocket.channel}")
     private String rsocketChannel;
 
-    @Value("${bridge.quic.client.port}")
-    private int quicClientPort;
-    @Value("${bridge.quic.server.host}")
-    private String quicServerHost;
-    @Value("${bridge.quic.server.port}")
-    private int quicServerPort;
-
     @Autowired
     public RestController(RSocketRequester rSocketRequester, QuicClient quicClient) {
         this.rSocketRequester = rSocketRequester;
@@ -46,14 +39,8 @@ public class RestController {
                                                        .block();
             }
             case Constants.QUIC -> {
-                return quicClient.sendRequest(quicClientPort,
-                                                                 quicServerHost,
-                                                                 quicServerPort,
-                                                                 HttpMethod.GET,
-                                                                 "/",
-                                                                 null,
-                                                                 TestDto.class)
-                                                    .getReceivedContent();
+                return quicClient.sendRequest(HttpMethod.GET, "/", null, TestDto.class)
+                                 .getReceivedContent();
             }
             default -> throw new RuntimeException("Incorrect value of property 'bridge.protocol'");
         }
